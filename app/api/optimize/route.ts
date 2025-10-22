@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     // Déchiffrer les données de connexion côté serveur
     // NOTE: Dans une vraie app, le déchiffrement devrait être côté client uniquement
     // Ici on accepte le mot de passe maître pour la démo
-    let connectionData;
+    let connectionData: any;
     try {
       connectionData = await decryptJson(stored.encrypted, masterPassword);
     } catch (error) {
