@@ -5,9 +5,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnection } from '@/lib/store';
-import { Client as SSHClient } from 'ssh2';
-import simpleGit from 'simple-git';
 import { isHostAllowed } from '@/lib/crypto';
+
+// Force Node.js runtime (requis pour ssh2)
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || 'localhost').split(',');
 const TEST_TIMEOUT = 10000; // 10 secondes
@@ -85,7 +87,10 @@ export async function POST(
  */
 async function testGitConnection(data: any) {
   try {
+    // Import dynamique pour éviter les problèmes de build
+    const simpleGit = (await import('simple-git')).default;
     const git = simpleGit();
+
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Timeout')), TEST_TIMEOUT)
     );
@@ -116,162 +121,184 @@ async function testGitConnection(data: any) {
  * Teste une connexion SSH
  */
 async function testSshConnection(data: any): Promise<any> {
-  return new Promise((resolve) => {
-    const conn = new SSHClient();
+  try {
+    // Import dynamique pour éviter les problèmes de build
+    const { Client: SSHClient } = await import('ssh2');
 
-    const timeout = setTimeout(() => {
-      conn.end();
-      resolve({
-        ok: false,
-        type: 'ssh',
-        error: 'Timeout de connexion',
-      });
-    }, TEST_TIMEOUT);
+    return new Promise((resolve) => {
+      const conn = new SSHClient();
 
-    conn.on('ready', () => {
-      clearTimeout(timeout);
+      const timeout = setTimeout(() => {
+        conn.end();
+        resolve({
+          ok: false,
+          type: 'ssh',
+          error: 'Timeout de connexion',
+        });
+      }, TEST_TIMEOUT);
 
-      // Exécuter une commande simple
-      conn.exec('echo "ok"', (err, stream) => {
-        if (err) {
-          conn.end();
-          return resolve({
-            ok: false,
-            type: 'ssh',
-            error: `Erreur d'exécution: ${err.message}`,
-          });
-        }
+      conn.on('ready', () => {
+        clearTimeout(timeout);
 
-        stream.on('close', () => {
-          conn.end();
-          resolve({
-            ok: true,
-            type: 'ssh',
-            details: {
-              host: data.host,
-              port: data.port || 22,
-              username: data.username,
-              status: 'Connexion SSH réussie',
-            },
+        // Exécuter une commande simple
+        conn.exec('echo "ok"', (err, stream) => {
+          if (err) {
+            conn.end();
+            return resolve({
+              ok: false,
+              type: 'ssh',
+              error: `Erreur d'exécution: ${err.message}`,
+            });
+          }
+
+          stream.on('close', () => {
+            conn.end();
+            resolve({
+              ok: true,
+              type: 'ssh',
+              details: {
+                host: data.host,
+                port: data.port || 22,
+                username: data.username,
+                status: 'Connexion SSH réussie',
+              },
+            });
           });
         });
       });
-    });
 
-    conn.on('error', (err) => {
-      clearTimeout(timeout);
-      resolve({
-        ok: false,
-        type: 'ssh',
-        error: `Erreur de connexion: ${err.message}`,
+      conn.on('error', (err) => {
+        clearTimeout(timeout);
+        resolve({
+          ok: false,
+          type: 'ssh',
+          error: `Erreur de connexion: ${err.message}`,
+        });
       });
-    });
 
-    // Configuration de connexion
-    const config: any = {
-      host: data.host,
-      port: data.port || 22,
-      username: data.username,
-      readyTimeout: TEST_TIMEOUT,
-    };
+      // Configuration de connexion
+      const config: any = {
+        host: data.host,
+        port: data.port || 22,
+        username: data.username,
+        readyTimeout: TEST_TIMEOUT,
+      };
 
-    if (data.authMethod === 'password' && data.password) {
-      config.password = data.password;
-    } else if (data.authMethod === 'private_key' && data.privateKey) {
-      config.privateKey = data.privateKey;
-      if (data.passphrase) {
-        config.passphrase = data.passphrase;
+      if (data.authMethod === 'password' && data.password) {
+        config.password = data.password;
+      } else if (data.authMethod === 'private_key' && data.privateKey) {
+        config.privateKey = data.privateKey;
+        if (data.passphrase) {
+          config.passphrase = data.passphrase;
+        }
       }
-    }
 
-    conn.connect(config);
-  });
+      conn.connect(config);
+    });
+  } catch (error: any) {
+    return {
+      ok: false,
+      type: 'ssh',
+      error: `Erreur d'import SSH: ${error.message}`,
+    };
+  }
 }
 
 /**
  * Teste une connexion SFTP
  */
 async function testSftpConnection(data: any): Promise<any> {
-  return new Promise((resolve) => {
-    const conn = new SSHClient();
+  try {
+    // Import dynamique pour éviter les problèmes de build
+    const { Client: SSHClient } = await import('ssh2');
 
-    const timeout = setTimeout(() => {
-      conn.end();
-      resolve({
-        ok: false,
-        type: 'sftp',
-        error: 'Timeout de connexion',
-      });
-    }, TEST_TIMEOUT);
+    return new Promise((resolve) => {
+      const conn = new SSHClient();
 
-    conn.on('ready', () => {
-      clearTimeout(timeout);
+      const timeout = setTimeout(() => {
+        conn.end();
+        resolve({
+          ok: false,
+          type: 'sftp',
+          error: 'Timeout de connexion',
+        });
+      }, TEST_TIMEOUT);
 
-      conn.sftp((err, sftp) => {
-        if (err) {
-          conn.end();
-          return resolve({
-            ok: false,
-            type: 'sftp',
-            error: `Erreur SFTP: ${err.message}`,
-          });
-        }
+      conn.on('ready', () => {
+        clearTimeout(timeout);
 
-        // Lister le répertoire root
-        sftp.readdir('/', (err, list) => {
-          sftp.end();
-          conn.end();
-
+        conn.sftp((err, sftp) => {
           if (err) {
+            conn.end();
             return resolve({
               ok: false,
               type: 'sftp',
-              error: `Erreur de lecture: ${err.message}`,
+              error: `Erreur SFTP: ${err.message}`,
             });
           }
 
-          resolve({
-            ok: true,
-            type: 'sftp',
-            details: {
-              host: data.host,
-              port: data.port || 22,
-              username: data.username,
-              status: 'Connexion SFTP réussie',
-              files: list?.length || 0,
-            },
+          // Lister le répertoire root
+          sftp.readdir('/', (err, list) => {
+            sftp.end();
+            conn.end();
+
+            if (err) {
+              return resolve({
+                ok: false,
+                type: 'sftp',
+                error: `Erreur de lecture: ${err.message}`,
+              });
+            }
+
+            resolve({
+              ok: true,
+              type: 'sftp',
+              details: {
+                host: data.host,
+                port: data.port || 22,
+                username: data.username,
+                status: 'Connexion SFTP réussie',
+                files: list?.length || 0,
+              },
+            });
           });
         });
       });
-    });
 
-    conn.on('error', (err) => {
-      clearTimeout(timeout);
-      resolve({
-        ok: false,
-        type: 'sftp',
-        error: `Erreur de connexion: ${err.message}`,
+      conn.on('error', (err) => {
+        clearTimeout(timeout);
+        resolve({
+          ok: false,
+          type: 'sftp',
+          error: `Erreur de connexion: ${err.message}`,
+        });
       });
-    });
 
-    const config: any = {
-      host: data.host,
-      port: data.port || 22,
-      username: data.username,
-      readyTimeout: TEST_TIMEOUT,
-    };
+      const config: any = {
+        host: data.host,
+        port: data.port || 22,
+        username: data.username,
+        readyTimeout: TEST_TIMEOUT,
+      };
 
-    if (data.authMethod === 'password' && data.password) {
-      config.password = data.password;
-    } else if (data.authMethod === 'private_key' && data.privateKey) {
-      config.privateKey = data.privateKey;
-      if (data.passphrase) {
-        config.passphrase = data.passphrase;
+      if (data.authMethod === 'password' && data.password) {
+        config.password = data.password;
+      } else if (data.authMethod === 'private_key' && data.privateKey) {
+        config.privateKey = data.privateKey;
+        if (data.passphrase) {
+          config.passphrase = data.passphrase;
+        }
       }
-    }
 
-    conn.connect(config);
-  });
+      conn.connect(config);
+    });
+  } catch (error: any) {
+    return {
+      ok: false,
+      type: 'sftp',
+      error: `Erreur d'import SFTP: ${error.message}`,
+    };
+  }
 }
 
 /**

@@ -9,6 +9,10 @@ import { getConnection } from '@/lib/store';
 import { runOptimizationPipeline, OptimizationConfig } from '@/lib/optimizer';
 import { decryptJson } from '@/lib/crypto';
 
+// Force Node.js runtime (requis pour ssh2 et child_process)
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 const OptimizeRequestSchema = z.object({
   connectionId: z.string(),
   masterPassword: z.string(),
