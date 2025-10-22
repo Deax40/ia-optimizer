@@ -34,24 +34,6 @@ const nextConfig = {
       },
     ];
   },
-
-  // Exclure ssh2 du bundle (modules natifs)
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // Marquer ssh2 comme external pour éviter le bundling
-      config.externals = [...(config.externals || []), 'ssh2', 'cpu-features'];
-    }
-
-    // Ignorer les fichiers .node
-    config.module = config.module || {};
-    config.module.rules = config.module.rules || [];
-    config.module.rules.push({
-      test: /\.node$/,
-      use: 'node-loader',
-    });
-
-    return config;
-  },
 }
 
 module.exports = nextConfig
