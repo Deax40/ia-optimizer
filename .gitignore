@@ -37,3 +37,6 @@ next-env.d.ts
 /data/connections.enc.json
 /.reports/*.json
 /.reports/*.md
+
+# vercel
+.vercel
